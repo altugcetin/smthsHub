@@ -30,6 +30,7 @@ public class InventoryManager {
     public void onEnable(SmthsHubPlugin plugin) {
         this.plugin = plugin;
         this.scheduler = SmthsHubPlugin.scheduler();
+        BedrockMenus.enable(plugin);
         loadCustomMenus();
         plugin.getServer().getPluginManager().registerEvents(new InventoryListener(), plugin);
     }
@@ -97,7 +98,10 @@ public class InventoryManager {
         return Optional.ofNullable(inventories.get(key));
     }
 
-    public void onDisable() {
+    public void onDisable(boolean shutdown) {
+        if (plugin != null) {
+            BedrockMenus.disable(plugin, shutdown);
+        }
         inventories.values().forEach(abstractInventory -> {
             abstractInventory.getOpenInventories().forEach(uuid -> {
                 Player player = Bukkit.getPlayer(uuid);

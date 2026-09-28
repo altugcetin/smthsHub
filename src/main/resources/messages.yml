@@ -76,3 +76,19 @@ Messages:
 
   ANTI_WORLD_DOWNLOADER:
     ADMIN_NOTIFY: "%prefix% &f%player% &chas joined with the World Downloader Mod, their ability to use it has been restricted by our systems."
+
+  BEDROCK:
+    USAGE: "%prefix% &cKullanım: /smthshub bedrock <oyuncu>"
+    OFFLINE: "%prefix% &c%player% çevrimiçi değil."
+    YES: "evet"
+    NO: "hayır"
+    NONE: "yok"
+    UNLISTED: "Floodgate %uuid% oyuncusunu tanımıyor. Proxy Floodgate config'inde send-floodgate-data ve key.pem kontrol edilmeli."
+    REPORT:
+      - "%prefix% &7UUID: &f%uuid%"
+      - "%prefix% &7Floodgate formatı: &f%floodgate_uuid%"
+      - "%prefix% &7Floodgate listesi: &f%listed%"
+      - "%prefix% &7floodgate:form dinliyor: &f%listening%"
+      - "%prefix% &7Kanal kayıtları: &f%plugins%"
+      - "%prefix% &7Floodgate dinleyicisi bizde: &f%holding%"
+      - "%prefix% &7Bekleyen form: &f%pending%"

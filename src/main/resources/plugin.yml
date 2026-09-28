@@ -33,6 +33,7 @@ permissions:
       deluxehub.command.fly.others: true
       deluxehub.command.setlobby: true
       deluxehub.command.vanish: true
+      deluxehub.command.bedrock: true
   deluxehub.bypass.*:
     description: Gives access to all bypass permissions
     children:

@@ -34,12 +34,17 @@ final class FloodgateForms {
                 return;
             }
             InventoryItem item = buttons.get(id);
-            SmthsHubPlugin.scheduler().runAtEntity(player, task -> {
+            Runnable run = () -> {
                 for (ClickAction action : item.getClickActions()) {
                     action.execute(player);
                 }
-            });
+            };
+            if (SmthsHubPlugin.scheduler().isOwnedByCurrentRegion(player)) {
+                run.run();
+            } else {
+                SmthsHubPlugin.scheduler().runAtEntity(player, task -> run.run());
+            }
         });
-        return api.sendForm(player.getUniqueId(), builder);
+        return api.sendForm(player.getUniqueId(), builder.build());
     }
 }

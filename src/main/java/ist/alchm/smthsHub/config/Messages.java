@@ -64,7 +64,15 @@ public enum Messages {
     HOLOGRAMS_ADDED_LINE("HOLOGRAMS.ADDED_LINE"),
     HOLOGRAMS_REMOVED_LINE("HOLOGRAMS.REMOVED_LINE"),
 
-    WORLD_DOWNLOAD_NOTIFY("ANTI_WORLD_DOWNLOADER.ADMIN_NOTIFY");
+    WORLD_DOWNLOAD_NOTIFY("ANTI_WORLD_DOWNLOADER.ADMIN_NOTIFY"),
+
+    BEDROCK_USAGE("BEDROCK.USAGE"),
+    BEDROCK_OFFLINE("BEDROCK.OFFLINE"),
+    BEDROCK_REPORT("BEDROCK.REPORT"),
+    BEDROCK_YES("BEDROCK.YES"),
+    BEDROCK_NO("BEDROCK.NO"),
+    BEDROCK_NONE("BEDROCK.NONE"),
+    BEDROCK_UNLISTED("BEDROCK.UNLISTED");
 
     private static FileConfiguration config;
     private final String path;
@@ -78,18 +86,29 @@ public enum Messages {
     }
 
     public void send(CommandSender receiver, Object... replacements) {
-        Object value = config.get("Messages." + this.path);
-
-        String message;
-        if (value == null) {
-            message = "DeluxeHub: message not found (" + this.path + ")";
-        } else {
-            message = value instanceof List ? TextUtil.fromList((List<?>) value) : value.toString();
+        if (config == null || config.get("Messages." + this.path) == null) {
+            receiver.sendMessage("DeluxeHub: message not found (" + this.path + ")");
+            return;
         }
-
+        String message = text(replacements);
         if (!message.isEmpty()) {
-            receiver.sendMessage(ColorUtil.color(replace(message, replacements)));
+            receiver.sendMessage(message);
         }
+    }
+
+    public String text(Object... replacements) {
+        if (config == null) {
+            return "";
+        }
+        Object value = config.get("Messages." + this.path);
+        if (value == null) {
+            return "";
+        }
+        String message = value instanceof List ? TextUtil.fromList((List<?>) value) : value.toString();
+        if (message == null || message.isEmpty()) {
+            return "";
+        }
+        return ColorUtil.color(replace(message, replacements));
     }
 
     private String replace(String message, Object... replacements) {

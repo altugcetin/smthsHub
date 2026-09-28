@@ -38,6 +38,7 @@ public class ActionManager {
                 new ProxyAction(),
                 new DelayAction()
         );
+        actions.put("BUNGEE", actions.get("PROXY"));
     }
 
     public void registerAction(Action... actions) {

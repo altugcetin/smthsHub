@@ -142,7 +142,7 @@ public class SmthsHubPlugin extends JavaPlugin {
     public void onDisable() {
         scheduler.cancelAllTasks();
         moduleManager.unloadModules();
-        inventoryManager.onDisable();
+        inventoryManager.onDisable(true);
         configManager.saveFiles();
     }
 
@@ -152,7 +152,7 @@ public class SmthsHubPlugin extends JavaPlugin {
 
         configManager.reloadFiles();
 
-        inventoryManager.onDisable();
+        inventoryManager.onDisable(false);
         inventoryManager.onEnable(this);
 
         getCommandManager().reload();

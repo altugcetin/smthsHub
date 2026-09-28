@@ -17,6 +17,7 @@ public enum Permissions {
     COMMAND_LOCKCHAT("command.lockchat"),
     COMMAND_SET_LOBBY("command.setlobby"),
     COMMAND_VANISH("command.vanish"),
+    COMMAND_BEDROCK("command.bedrock"),
 
     // Module stuff
     ANTI_SWEAR_BYPASS("bypass.antiswear"),

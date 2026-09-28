@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "ist.alchm"
-version = "4.0.0"
+version = "4.0.2"
 description = "smthsHub"
 
 repositories {
@@ -84,6 +84,13 @@ val spawnMemoryTest = tasks.register<JavaExec>("spawnMemoryTest") {
     dependsOn(tasks.named("testClasses"))
 }
 
+val bedrockFormsTest = tasks.register<JavaExec>("bedrockFormsTest") {
+    group = "verification"
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("ist.alchm.smthsHub.inventory.BedrockFormsTest")
+    dependsOn(tasks.named("testClasses"))
+}
+
 tasks.named("build") {
-    dependsOn(spawnMemoryTest)
+    dependsOn(spawnMemoryTest, bedrockFormsTest)
 }

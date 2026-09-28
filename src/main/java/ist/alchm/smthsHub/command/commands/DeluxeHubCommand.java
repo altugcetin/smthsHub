@@ -8,6 +8,7 @@ import ist.alchm.smthsHub.SmthsHubPlugin;
 import ist.alchm.smthsHub.Permissions;
 import ist.alchm.smthsHub.command.CommandManager;
 import ist.alchm.smthsHub.config.Messages;
+import ist.alchm.smthsHub.inventory.BedrockMenus;
 import ist.alchm.smthsHub.inventory.InventoryManager;
 import ist.alchm.smthsHub.module.ModuleManager;
 import ist.alchm.smthsHub.module.ModuleType;
@@ -18,6 +19,7 @@ import ist.alchm.smthsHub.module.modules.visual.scoreboard.ScoreboardManager;
 import ist.alchm.smthsHub.module.modules.world.LobbySpawn;
 import ist.alchm.smthsHub.utility.TextUtil;
 import net.zithium.library.utils.ColorUtil;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -195,6 +197,40 @@ public class DeluxeHubCommand {
             plugin.getInventoryManager().getInventory(menuId).ifPresentOrElse(
                     inventory -> scheduler.runAtEntity((Player) sender, task -> inventory.openInventory((Player) sender)),
                     () -> sender.sendMessage(ColorUtil.color("&c'" + menuId + "' is not a valid menu ID."))
+            );
+        }
+
+        else if (args.getString(0).equalsIgnoreCase("bedrock")) {
+            if (!sender.hasPermission(Permissions.COMMAND_BEDROCK.getPermission())) {
+                Messages.NO_PERMISSION.send(sender);
+                return;
+            }
+            if (args.argsLength() < 2) {
+                Messages.BEDROCK_USAGE.send(sender);
+                return;
+            }
+            Player target = Bukkit.getPlayer(args.getString(1));
+            if (target == null) {
+                Messages.BEDROCK_OFFLINE.send(sender, "%player%", args.getString(1));
+                return;
+            }
+            BedrockMenus.Status status = BedrockMenus.status(target);
+            String yes = Messages.BEDROCK_YES.text();
+            String no = Messages.BEDROCK_NO.text();
+            String plugins = status.plugins().isEmpty()
+                    ? Messages.BEDROCK_NONE.text()
+                    : String.join(", ", status.plugins());
+            String pending = status.pendingId() == null
+                    ? Messages.BEDROCK_NONE.text()
+                    : status.pendingId().toString();
+            Messages.BEDROCK_REPORT.send(sender,
+                    "%uuid%", target.getUniqueId().toString(),
+                    "%floodgate_uuid%", status.floodgateUuid() ? yes : no,
+                    "%listed%", status.listed() ? yes : no,
+                    "%listening%", status.listening() ? yes : no,
+                    "%plugins%", plugins,
+                    "%holding%", status.holding() ? yes : no,
+                    "%pending%", pending
             );
         }
 
