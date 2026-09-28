@@ -9,6 +9,7 @@ import com.tcoded.folialib.FoliaLib;
 import com.tcoded.folialib.impl.PlatformScheduler;
 import de.tr7zw.changeme.nbtapi.utils.MinecraftVersion;
 import ist.alchm.smthsHub.action.ActionManager;
+import ist.alchm.smthsHub.debug.BedrockDebug;
 import ist.alchm.smthsHub.command.CommandManager;
 import ist.alchm.smthsHub.config.ConfigManager;
 import ist.alchm.smthsHub.config.ConfigType;
@@ -103,6 +104,7 @@ public class SmthsHubPlugin extends JavaPlugin {
 
         inventoryManager = new InventoryManager();
         inventoryManager.onEnable(this);
+        BedrockDebug.start(this);
 
         moduleManager = new ModuleManager();
         moduleManager.loadModules(this);
@@ -141,6 +143,7 @@ public class SmthsHubPlugin extends JavaPlugin {
 
     public void onDisable() {
         scheduler.cancelAllTasks();
+        BedrockDebug.stop();
         moduleManager.unloadModules();
         inventoryManager.onDisable(true);
         configManager.saveFiles();
@@ -158,6 +161,7 @@ public class SmthsHubPlugin extends JavaPlugin {
         getCommandManager().reload();
 
         moduleManager.loadModules(this);
+        BedrockDebug.arm();
     }
 
     @Override

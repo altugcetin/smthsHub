@@ -2,6 +2,7 @@ package ist.alchm.smthsHub.inventory;
 
 import ist.alchm.smthsHub.SmthsHubPlugin;
 import ist.alchm.smthsHub.config.Messages;
+import ist.alchm.smthsHub.debug.BedrockDebug;
 import org.bukkit.entity.Player;
 import org.geysermc.floodgate.api.FloodgateApi;
 import org.bukkit.event.EventHandler;
@@ -79,6 +80,9 @@ public final class BedrockMenus {
         }
         boolean floodgatePluginEnabled = plugin.getServer().getPluginManager().isPluginEnabled("floodgate");
         if (floodgatePluginEnabled && FloodgateForms.open(plugin, player, formTitle, buttons)) {
+            if (BedrockDebug.active()) {
+                BedrockDebug.formApi(player);
+            }
             return true;
         }
         boolean floodgateId = MenuText.floodgateUuid(player.getUniqueId());
@@ -89,6 +93,9 @@ public final class BedrockMenus {
         boolean silenced = !floodgatePluginEnabled || silenceFloodgate(plugin);
         BedrockFormPacket.Open path = BedrockFormPacket.choose(floodgatePluginEnabled, false, true, listening, silenced);
         if (path != BedrockFormPacket.Open.RAW) {
+            if (BedrockDebug.active()) {
+                BedrockDebug.formSkipped(player);
+            }
             if (!listening && NOT_LISTENING.compareAndSet(false, true)) {
                 plugin.getLogger().warning("Bedrock menu stayed a chest: " + player.getUniqueId() + " is not listening on " + BedrockFormPacket.CHANNEL + ".");
             } else if (listening && KICK_REMAINS.compareAndSet(false, true)) {
@@ -128,6 +135,9 @@ public final class BedrockMenus {
         if (!BedrockFormPacket.CHANNEL.equals(channel) || message == null || message.length < 2) {
             return;
         }
+        if (BedrockDebug.active()) {
+            BedrockDebug.messenger(player);
+        }
         Pending pending = PENDING.get(player.getUniqueId());
         Integer pendingId = pending == null ? null : pending.id;
         BedrockFormLogic.Decision decision = BedrockFormLogic.decide(
@@ -136,6 +146,9 @@ public final class BedrockMenus {
                 floodgateLists(player),
                 holdsFloodgateListener()
         );
+        if (BedrockDebug.active()) {
+            BedrockDebug.decision(player, decision.name(), BedrockFormPacket.formId(message), pendingId);
+        }
         if (decision == BedrockFormLogic.Decision.DELEGATE) {
             delegateListedForm(channel, player, message);
             return;
@@ -157,8 +170,23 @@ public final class BedrockMenus {
             if (!player.isOnline()) {
                 return;
             }
-            for (ClickAction action : item.getClickActions()) {
-                action.execute(player);
+            if (!BedrockDebug.active()) {
+                for (ClickAction action : item.getClickActions()) {
+                    action.execute(player);
+                }
+                return;
+            }
+            try {
+                for (ClickAction action : item.getClickActions()) {
+                    action.execute(player);
+                }
+                BedrockDebug.actionRan(player);
+            } catch (Throwable ex) {
+                BedrockDebug.actionFailed(player, ex);
+                if (ex instanceof RuntimeException runtime) {
+                    throw runtime;
+                }
+                throw new RuntimeException(ex);
             }
         });
     }
@@ -208,6 +236,9 @@ public final class BedrockMenus {
         PENDING.put(player.getUniqueId(), pending);
         try {
             player.sendPluginMessage(plugin, BedrockFormPacket.CHANNEL, packet);
+            if (BedrockDebug.active()) {
+                BedrockDebug.formRaw(player, id);
+            }
             return true;
         } catch (RuntimeException ex) {
             PENDING.remove(player.getUniqueId(), pending);

@@ -6,7 +6,7 @@ api-version: '26.2'
 main: ist.alchm.smthsHub.SmthsHubPlugin
 folia-supported: true
 loadbefore: [Essentials]
-softdepend: [PlaceholderAPI, Multiverse-Core, MythicDungeons, floodgate]
+softdepend: [PlaceholderAPI, Multiverse-Core, MythicDungeons, floodgate, packetevents, ProtocolLib]
 permissions:
   deluxehub.*:
     description: Gives access to all DeluxeHub permissions

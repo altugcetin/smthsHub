@@ -4,12 +4,13 @@ plugins {
 }
 
 group = "ist.alchm"
-version = "4.0.2"
+version = "4.0.3"
 description = "smthsHub"
 
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
+    maven("https://repo.codemc.io/repository/maven-public/")
     maven("https://repo.opencollab.dev/main/")
     maven("https://oss.sonatype.org/content/groups/public/")
     maven("https://repo.tcoded.com/releases")
@@ -34,6 +35,8 @@ dependencies {
     implementation("com.github.ItzSave:ZithiumLibrary:1f5182b77f")
 
     compileOnly("io.papermc.paper:paper-api:26.2.build.129-stable")
+    compileOnly("com.github.retrooper:packetevents-spigot:2.13.0")
+    compileOnly("com.github.dmulloy2:ProtocolLib:5.3.0")
     compileOnly("org.geysermc.floodgate:api:2.2.5-SNAPSHOT")
     compileOnly("net.md-5:bungeecord-chat:1.16-R0.1")
     compileOnly("com.mojang:authlib:1.5.21")
@@ -91,6 +94,13 @@ val bedrockFormsTest = tasks.register<JavaExec>("bedrockFormsTest") {
     dependsOn(tasks.named("testClasses"))
 }
 
+val bedrockDebugTest = tasks.register<JavaExec>("bedrockDebugTest") {
+    group = "verification"
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("ist.alchm.smthsHub.debug.BedrockDebugTest")
+    dependsOn(tasks.named("testClasses"))
+}
+
 tasks.named("build") {
-    dependsOn(spawnMemoryTest, bedrockFormsTest)
+    dependsOn(spawnMemoryTest, bedrockFormsTest, bedrockDebugTest)
 }

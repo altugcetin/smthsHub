@@ -1,6 +1,7 @@
 package ist.alchm.smthsHub.inventory;
 
 import ist.alchm.smthsHub.SmthsHubPlugin;
+import ist.alchm.smthsHub.debug.BedrockDebug;
 import org.bukkit.entity.Player;
 import org.geysermc.cumulus.form.SimpleForm;
 import org.geysermc.floodgate.api.FloodgateApi;
@@ -35,8 +36,25 @@ final class FloodgateForms {
             }
             InventoryItem item = buttons.get(id);
             Runnable run = () -> {
-                for (ClickAction action : item.getClickActions()) {
-                    action.execute(player);
+                if (!BedrockDebug.active()) {
+                    for (ClickAction action : item.getClickActions()) {
+                        action.execute(player);
+                    }
+                    return;
+                }
+                BedrockDebug.messenger(player);
+                BedrockDebug.decision(player, "ACT", null, null);
+                try {
+                    for (ClickAction action : item.getClickActions()) {
+                        action.execute(player);
+                    }
+                    BedrockDebug.actionRan(player);
+                } catch (Throwable ex) {
+                    BedrockDebug.actionFailed(player, ex);
+                    if (ex instanceof RuntimeException runtime) {
+                        throw runtime;
+                    }
+                    throw new RuntimeException(ex);
                 }
             };
             if (SmthsHubPlugin.scheduler().isOwnedByCurrentRegion(player)) {

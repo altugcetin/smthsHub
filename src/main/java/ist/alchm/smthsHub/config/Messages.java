@@ -124,6 +124,27 @@ public enum Messages {
         return message.replace("%prefix%", prefix != null && !prefix.isEmpty() ? prefix : "");
     }
 
+    public static String lookup(String path, Object... replacements) {
+        if (config == null) {
+            return "";
+        }
+        Object value = config.get("Messages." + path);
+        if (value == null) {
+            return "";
+        }
+        String message = value instanceof List ? TextUtil.fromList((List<?>) value) : value.toString();
+        if (message == null || message.isEmpty()) {
+            return "";
+        }
+        for (int i = 0; i < replacements.length; i += 2) {
+            if (i + 1 >= replacements.length) {
+                break;
+            }
+            message = message.replace(String.valueOf(replacements[i]), String.valueOf(replacements[i + 1]));
+        }
+        return ColorUtil.color(message);
+    }
+
     public String getPath() {
         return this.path;
     }
