@@ -3,13 +3,14 @@ plugins {
     id("com.gradleup.shadow") version "9.2.2"
 }
 
-group = "net.zithium"
-version = "3.8.5"
-description = "DeluxeHub"
+group = "ist.alchm"
+version = "4.0.0"
+description = "smthsHub"
 
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
+    maven("https://repo.opencollab.dev/main/")
     maven("https://oss.sonatype.org/content/groups/public/")
     maven("https://repo.tcoded.com/releases")
     maven("https://jitpack.io")
@@ -32,14 +33,15 @@ dependencies {
     implementation("com.github.shynixn.headdatabase:hdb-api:1.0")
     implementation("com.github.ItzSave:ZithiumLibrary:1f5182b77f")
 
-    compileOnly("io.papermc.paper:paper-api:1.20.4-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:26.2.build.129-stable")
+    compileOnly("org.geysermc.floodgate:api:2.2.5-SNAPSHOT")
     compileOnly("net.md-5:bungeecord-chat:1.16-R0.1")
     compileOnly("com.mojang:authlib:1.5.21")
     compileOnly("me.clip:placeholderapi:2.11.6")
 }
 
 java {
-    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    toolchain.languageVersion.set(JavaLanguageVersion.of(25))
 }
 
 tasks {
@@ -62,11 +64,26 @@ tasks {
 
         archiveClassifier.set("") // Removes "-all" suffix
 
-        relocate("org.bstats", "net.zithium.deluxehub.libs.metrics")
-        relocate("cl.bgmp", "net.zithium.deluxehub.libs.command")
-        relocate("com.tcoded.folialib", "net.zithium.deluxehub.libs.folialib")
-        relocate("de.tr7zw.changeme.nbtapi", "net.zithium.deluxehub.libs.nbt")
-        relocate("net.zithium.library", "net.zithium.deluxehub.libs.library")
-        relocate("com.cryptomorin.xseries", "net.zithium.deluxehub.libs.xseries")
+        relocate("org.bstats", "ist.alchm.smthsHub.libs.metrics")
+        relocate("cl.bgmp", "ist.alchm.smthsHub.libs.command")
+        relocate("com.tcoded.folialib", "ist.alchm.smthsHub.libs.folialib")
+        relocate("de.tr7zw.changeme.nbtapi", "ist.alchm.smthsHub.libs.nbt")
+        relocate("net.zithium.library", "ist.alchm.smthsHub.libs.library")
+        relocate("com.cryptomorin.xseries", "ist.alchm.smthsHub.libs.xseries")
     }
+
+    named<Test>("test") {
+        failOnNoDiscoveredTests.set(false)
+    }
+}
+
+val spawnMemoryTest = tasks.register<JavaExec>("spawnMemoryTest") {
+    group = "verification"
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("ist.alchm.smthsHub.spawn.SpawnMemoryTest")
+    dependsOn(tasks.named("testClasses"))
+}
+
+tasks.named("build") {
+    dependsOn(spawnMemoryTest)
 }

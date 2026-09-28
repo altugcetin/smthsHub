@@ -1,12 +1,12 @@
-name: 'DeluxeHub'
+name: smthsHub
 authors: [ ItzSave, ItsLewizzz ]
 version: '${version}'
-description: "The ultimate all in one hub solution."
-api-version: 1.19
-main: net.zithium.deluxehub.DeluxeHubPlugin
+description: "smthsHub"
+api-version: '26.2'
+main: ist.alchm.smthsHub.SmthsHubPlugin
 folia-supported: true
 loadbefore: [Essentials]
-softdepend: [PlaceholderAPI, Multiverse-Core, MythicDungeons]
+softdepend: [PlaceholderAPI, Multiverse-Core, MythicDungeons, floodgate]
 permissions:
   deluxehub.*:
     description: Gives access to all DeluxeHub permissions
