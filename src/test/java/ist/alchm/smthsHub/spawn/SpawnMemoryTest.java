@@ -1,10 +1,7 @@
 package ist.alchm.smthsHub.spawn;
 
-import ist.alchm.smthsHub.inventory.BedrockFormPacket;
 import ist.alchm.smthsHub.inventory.MenuText;
 
-import java.nio.charset.StandardCharsets;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -23,10 +20,6 @@ public final class SpawnMemoryTest {
         commandNotReplacedByParsedDisk();
         menuLabels();
         bedrockUuid();
-        formPacketMatchesCumulus();
-        formResponse();
-        serverFormIdLeavesProxyBitClear();
-        unlistedBedrockFormPath();
     }
 
     private static void upstreamSaveDoesNotReplaceDisk() {
@@ -136,77 +129,6 @@ public final class SpawnMemoryTest {
         UUID id = UUID.fromString("00000000-0000-0000-0009-01fb32f2e9a2");
         check(MenuText.floodgateUuid(id), "logged Bedrock uuid was not recognized");
         check(!MenuText.floodgateUuid(UUID.randomUUID()), "random uuid counted as Floodgate");
-    }
-
-    private static void formPacketMatchesCumulus() {
-        String plain = "{\"title\":\"s\",\"content\":\"\",\"buttons\":[{\"text\":\"a\"}],\"type\":\"form\"}";
-        String escaped = "{\"title\":\"a\\\"b\\\\c\",\"content\":\"\",\"buttons\":[{\"text\":\"x\\u003cy\\u003e\\u0026\\u003d\\u0027\\n\"}],\"type\":\"form\"}";
-        check(plain.equals(BedrockFormPacket.json("s", List.of("a"))), "simple form json drifted from Cumulus");
-        check(escaped.equals(BedrockFormPacket.json("a\"b\\c", List.of("x<y>&='\n"))), "form escaping drifted from Cumulus");
-        String menu = BedrockFormPacket.json("ʟᴏʙɪ sᴇᴄɪᴍɪ", List.of("ʙʟᴏᴄᴋsᴍᴘ", "ʟᴏʙɪ"));
-        check(menu.contains("\"title\":\"ʟᴏʙɪ sᴇᴄɪᴍɪ\"") && menu.contains("{\"text\":\"ʙʟᴏᴄᴋsᴍᴘ\"},{\"text\":\"ʟᴏʙɪ\"}"), "menu labels were escaped");
-        byte[] packet = BedrockFormPacket.encode(1, "s", List.of("a"));
-        check(packet[0] == 0 && packet[1] == 0 && packet[2] == 1, "form header is not type, id high, id low");
-        check(plain.equals(new String(packet, 3, packet.length - 3, StandardCharsets.UTF_8)), "packet json was shifted");
-    }
-
-    private static void formResponse() {
-        byte[] click = new byte[] {0, 1, '2'};
-        check(BedrockFormPacket.formId(click) == 1, "response form id");
-        check(BedrockFormPacket.clickedButton(click) == 2, "response button");
-        byte[] quotedBody = "\"0\"".getBytes(StandardCharsets.UTF_8);
-        byte[] quoted = new byte[quotedBody.length + 2];
-        quoted[0] = 0;
-        quoted[1] = 1;
-        System.arraycopy(quotedBody, 0, quoted, 2, quotedBody.length);
-        check(BedrockFormPacket.clickedButton(quoted) == 0, "quoted button was dropped");
-        byte[] prefixed = new byte[] {0, 0, 0, '0'};
-        check(BedrockFormPacket.clickedButton(prefixed) == 0, "control byte hid the button");
-        byte[] arrayBody = "[0]".getBytes(StandardCharsets.UTF_8);
-        byte[] array = new byte[arrayBody.length + 2];
-        array[0] = 0;
-        array[1] = 1;
-        System.arraycopy(arrayBody, 0, array, 2, arrayBody.length);
-        check(BedrockFormPacket.clickedButton(array) == 0, "bracketed button was dropped");
-        check(BedrockFormPacket.labelButton("Blocksmp", List.of("Blocksmp", "Pillars")) == 0, "button text was not matched");
-        check(BedrockFormPacket.clickedButton(labelBytes("Lobi01")) == -1, "lobby label counted as a button index");
-        byte[] body = "null".getBytes(StandardCharsets.UTF_8);
-        byte[] closed = new byte[body.length + 2];
-        closed[0] = 0;
-        closed[1] = 1;
-        System.arraycopy(body, 0, closed, 2, body.length);
-        check(BedrockFormPacket.clickedButton(closed) == -1, "closed form counted as a click");
-        check(BedrockFormPacket.clickedButton(new byte[] {0, 1}) == -1, "empty response counted as a click");
-    }
-
-    private static byte[] labelBytes(String text) {
-        byte[] body = text.getBytes(StandardCharsets.UTF_8);
-        byte[] data = new byte[body.length + 2];
-        data[1] = 1;
-        System.arraycopy(body, 0, data, 2, body.length);
-        return data;
-    }
-
-    private static void serverFormIdLeavesProxyBitClear() {
-        boolean rejected = false;
-        try {
-            BedrockFormPacket.encode(0x8000, "s", List.of("a"));
-        } catch (IllegalArgumentException ex) {
-            rejected = true;
-        }
-        check(rejected, "proxy form bit was accepted");
-        byte[] max = BedrockFormPacket.encode(Short.MAX_VALUE, "s", List.of("a"));
-        check((max[1] & 0xFF) == 0x7F && (max[2] & 0xFF) == 0xFF, "max server form id bytes");
-        check(BedrockFormPacket.formId(new byte[] {(byte) 0x7F, (byte) 0xFF}) == Short.MAX_VALUE, "max server form id read");
-    }
-
-    private static void unlistedBedrockFormPath() {
-        check(BedrockFormPacket.choose(true, true, false, true, false) == BedrockFormPacket.Open.API, "listed player left the api");
-        check(BedrockFormPacket.choose(true, false, true, true, true) == BedrockFormPacket.Open.RAW, "unlisted bedrock id was not sent");
-        check(BedrockFormPacket.choose(true, false, true, true, false) == BedrockFormPacket.Open.CHEST, "kick listener still opened a form");
-        check(BedrockFormPacket.choose(true, false, true, false, true) == BedrockFormPacket.Open.CHEST, "unheard channel opened a form");
-        check(BedrockFormPacket.choose(true, false, false, true, true) == BedrockFormPacket.Open.CHEST, "java player got a form");
-        check(BedrockFormPacket.choose(false, false, true, true, false) == BedrockFormPacket.Open.RAW, "proxy-only floodgate was not sent");
     }
 
     private static void check(boolean condition, String failure) {

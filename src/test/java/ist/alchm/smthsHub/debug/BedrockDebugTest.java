@@ -1,46 +1,47 @@
 package ist.alchm.smthsHub.debug;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 public final class BedrockDebugTest {
 
     public static void main(String[] args) {
         verdicts();
-        handshakeOnly();
         frames();
         varints();
         handshakes();
         fingerprints();
-        channelNotes();
+        fields();
+        reports();
+        messenger();
         System.out.println("bedrock debug ok");
     }
 
     private static void verdicts() {
         Tri[] values = Tri.values();
         int seen = 0;
-        for (Tri uuid : values) {
-            for (Tri marker : values) {
-                for (Tri listed : values) {
-                    for (Tri form : values) {
-                        for (Tri raw : values) {
+        for (Tri listed : values) {
+            for (Tri listener : values) {
+                for (Tri form : values) {
+                    for (Tri r1 : values) {
+                        for (Tri reply : values) {
                             for (Tri packetEvents : values) {
                                 for (Tri decoded : values) {
                                     for (Tri protocol : values) {
                                         for (Tri bukkit : values) {
-                                            for (Tri act : values) {
-                                                for (Tri failed : values) {
-                                                    DebugVerdict.Facts facts = new DebugVerdict.Facts(
-                                                            uuid, marker, listed, form, raw, packetEvents, decoded, protocol, bukkit, act, failed
-                                                    );
-                                                    DebugVerdict.Judgment judgment = DebugVerdict.judge(facts);
-                                                    DebugVerdict.Judgment expected = expected(facts);
-                                                    check(judgment.verdict() == expected.verdict() && judgment.blocked().equals(expected.blocked()));
-                                                    if (judgment.verdict() != Verdict.OLCULEMEDI) {
-                                                        check(judgment.blocked().isEmpty());
-                                                    }
-                                                    seen++;
+                                            for (Tri action : values) {
+                                                DebugVerdict.Facts facts = row(listed, listener, form, r1, reply, packetEvents, decoded, protocol, bukkit, action);
+                                                DebugVerdict.Judgment judgment = DebugVerdict.judge(facts);
+                                                DebugVerdict.Judgment want = expected(facts);
+                                                check(judgment.verdict() == want.verdict() && judgment.blocked().equals(want.blocked()));
+                                                if (judgment.verdict() != Verdict.OLCULEMEDI) {
+                                                    check(judgment.blocked().isEmpty());
+                                                } else {
+                                                    check(!judgment.blocked().isBlank());
                                                 }
+                                                seen++;
                                             }
                                         }
                                     }
@@ -51,93 +52,161 @@ public final class BedrockDebugTest {
                 }
             }
         }
-        check(seen == 177147);
-        check(DebugVerdict.judge(row(Tri.YES, Tri.NO, Tri.UNKNOWN, Tri.UNKNOWN, Tri.UNKNOWN, Tri.UNKNOWN, Tri.UNKNOWN, Tri.UNKNOWN, Tri.UNKNOWN, Tri.UNKNOWN, Tri.UNKNOWN)).verdict() == Verdict.PROXY_FLOODGATE_VERISI_YOK);
-        check(DebugVerdict.judge(row(Tri.YES, Tri.UNKNOWN, Tri.NO, Tri.NO, Tri.NO, Tri.NO, Tri.NO, Tri.NO, Tri.NO, Tri.NO, Tri.NO)).verdict() == Verdict.OLCULEMEDI);
-        check(DebugVerdict.judge(row(Tri.NO, Tri.NO, Tri.NO, Tri.YES, Tri.YES, Tri.NO, Tri.YES, Tri.NO, Tri.YES, Tri.YES, Tri.NO)).verdict() == Verdict.JAVA_OYUNCU);
+        check(seen == 59049);
         check(DebugVerdict.judge(solid()).verdict() == Verdict.SAGLAM);
-        check(DebugVerdict.judge(with(solid(), 2, Tri.NO)).verdict() == Verdict.BACKEND_FLOODGATE_OKUMUYOR);
-        check(DebugVerdict.judge(with(solid(), 3, Tri.NO)).verdict() == Verdict.FORM_GONDERILMEDI);
+        check(DebugVerdict.judge(with(solid(), 0, Tri.NO)).verdict() == Verdict.FLOODGATE_TANIMIYOR);
+        check(DebugVerdict.judge(with(solid(), 1, Tri.NO)).verdict() == Verdict.FLOODGATE_DINLEYICISI_YOK);
+        check(DebugVerdict.judge(with(solid(), 2, Tri.NO)).verdict() == Verdict.FORM_GONDERILMEDI);
+        check(DebugVerdict.judge(with(solid(), 3, Tri.NO)).verdict() == Verdict.OLCULEMEDI);
+        check("R1".equals(DebugVerdict.judge(with(solid(), 3, Tri.NO)).blocked()));
+        check(DebugVerdict.judge(with(solid(), 3, Tri.UNKNOWN)).verdict() == Verdict.OLCULEMEDI);
         check(DebugVerdict.judge(with(solid(), 4, Tri.NO)).verdict() == Verdict.CEVAP_BACKENDE_ULASMADI);
         check(DebugVerdict.judge(with(solid(), 5, Tri.YES)).verdict() == Verdict.PACKETEVENTS_IPTAL);
         check(DebugVerdict.judge(with(solid(), 6, Tri.NO)).verdict() == Verdict.DECODER_ONCESI_KAYIP);
         check(DebugVerdict.judge(with(solid(), 7, Tri.YES)).verdict() == Verdict.PROTOCOLLIB_IPTAL);
         check(DebugVerdict.judge(with(solid(), 8, Tri.NO)).verdict() == Verdict.BUKKIT_ONCESI_KAYIP);
-        check(DebugVerdict.judge(with(solid(), 9, Tri.NO)).verdict() == Verdict.SMTHSHUB_ESLESMEDI);
-        check(DebugVerdict.judge(with(solid(), 10, Tri.YES)).verdict() == Verdict.AKSIYON_HATASI);
+        check(DebugVerdict.judge(with(solid(), 9, Tri.NO)).verdict() == Verdict.FLOODGATE_ESLESTIRMEDI);
         check(DebugVerdict.judge(with(solid(), 4, Tri.UNKNOWN)).verdict() == Verdict.OLCULEMEDI);
-        check("R1".equals(DebugVerdict.judge(with(solid(), 4, Tri.UNKNOWN)).blocked()));
-    }
-
-    private static void handshakeOnly() {
-        check(DebugVerdict.handshake(Tri.NO, Tri.NO, Tri.NO).verdict() == Verdict.JAVA_OYUNCU);
-        check(DebugVerdict.handshake(Tri.YES, Tri.NO, Tri.NO).verdict() == Verdict.PROXY_FLOODGATE_VERISI_YOK);
-        check(DebugVerdict.handshake(Tri.YES, Tri.YES, Tri.NO).verdict() == Verdict.BACKEND_FLOODGATE_OKUMUYOR);
-        check(DebugVerdict.handshake(Tri.YES, Tri.YES, Tri.YES).verdict() == Verdict.HANDSHAKE_SAGLAM);
-        check(DebugVerdict.handshake(Tri.UNKNOWN, Tri.NO, Tri.NO).verdict() == Verdict.OLCULEMEDI);
-        check(DebugVerdict.handshake(Tri.YES, Tri.YES, Tri.UNKNOWN).verdict() == Verdict.OLCULEMEDI);
+        check(DebugVerdict.judge(with(solid(), 0, Tri.UNKNOWN)).verdict() == Verdict.OLCULEMEDI);
+        check(DebugVerdict.judge(row(Tri.NO, Tri.UNKNOWN, Tri.UNKNOWN, Tri.UNKNOWN, Tri.UNKNOWN, Tri.UNKNOWN, Tri.UNKNOWN, Tri.UNKNOWN, Tri.UNKNOWN, Tri.UNKNOWN)).verdict() == Verdict.FLOODGATE_TANIMIYOR);
     }
 
     private static DebugVerdict.Facts solid() {
-        return row(Tri.YES, Tri.YES, Tri.YES, Tri.YES, Tri.YES, Tri.NO, Tri.YES, Tri.NO, Tri.YES, Tri.YES, Tri.NO);
+        return row(Tri.YES, Tri.YES, Tri.YES, Tri.YES, Tri.YES, Tri.NO, Tri.YES, Tri.NO, Tri.YES, Tri.YES);
     }
 
     private static DebugVerdict.Facts with(DebugVerdict.Facts facts, int index, Tri value) {
         Tri[] values = new Tri[] {
-                facts.floodgateUuid(), facts.marker(), facts.listed(), facts.formSent(), facts.raw(),
-                facts.packetEventsCancel(), facts.decoded(), facts.protocolLibCancel(), facts.bukkit(),
-                facts.act(), facts.actionFailed()
+                facts.listed(), facts.floodgateListener(), facts.formSent(), facts.r1Measuring(), facts.formReply(),
+                facts.packetEventsCancel(), facts.decoded(), facts.protocolLibCancel(), facts.bukkit(), facts.action()
         };
         values[index] = value;
-        return row(values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7], values[8], values[9], values[10]);
+        return row(values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7], values[8], values[9]);
     }
 
-    private static DebugVerdict.Facts row(Tri uuid, Tri marker, Tri listed, Tri form, Tri raw, Tri packetEvents, Tri decoded, Tri protocol, Tri bukkit, Tri act, Tri failed) {
-        return new DebugVerdict.Facts(uuid, marker, listed, form, raw, packetEvents, decoded, protocol, bukkit, act, failed);
+    private static DebugVerdict.Facts row(Tri listed, Tri listener, Tri form, Tri r1, Tri reply, Tri packetEvents, Tri decoded, Tri protocol, Tri bukkit, Tri action) {
+        return new DebugVerdict.Facts(listed, listener, form, r1, reply, packetEvents, decoded, protocol, bukkit, action);
     }
 
     private static DebugVerdict.Judgment expected(DebugVerdict.Facts facts) {
         Object[] steps = new Object[] {
-                "uuid", facts.floodgateUuid(), null,
-                "H", facts.marker(), null,
-                "F", facts.listed(), Verdict.BACKEND_FLOODGATE_OKUMUYOR,
+                "F", facts.listed(), Verdict.FLOODGATE_TANIMIYOR,
+                "F-dinleyici", facts.floodgateListener(), Verdict.FLOODGATE_DINLEYICISI_YOK,
                 "C", facts.formSent(), Verdict.FORM_GONDERILMEDI,
-                "R1", facts.raw(), Verdict.CEVAP_BACKENDE_ULASMADI,
+                "R1", facts.r1Measuring(), null,
+                "R1-cevap", facts.formReply(), Verdict.CEVAP_BACKENDE_ULASMADI,
                 "R3", facts.packetEventsCancel(), Verdict.PACKETEVENTS_IPTAL,
                 "R4", facts.decoded(), Verdict.DECODER_ONCESI_KAYIP,
                 "R6", facts.protocolLibCancel(), Verdict.PROTOCOLLIB_IPTAL,
                 "R7", facts.bukkit(), Verdict.BUKKIT_ONCESI_KAYIP,
-                "R8", facts.act(), Verdict.SMTHSHUB_ESLESMEDI,
-                "aksiyon", facts.actionFailed(), Verdict.AKSIYON_HATASI
+                "aksiyon", facts.action(), Verdict.FLOODGATE_ESLESTIRMEDI
         };
-        if (facts.floodgateUuid() == Tri.UNKNOWN) {
-            return new DebugVerdict.Judgment(Verdict.OLCULEMEDI, "uuid");
-        }
-        if (facts.marker() == Tri.UNKNOWN) {
-            return new DebugVerdict.Judgment(Verdict.OLCULEMEDI, "H");
-        }
-        if (facts.floodgateUuid() == Tri.NO && facts.marker() == Tri.NO) {
-            return new DebugVerdict.Judgment(Verdict.JAVA_OYUNCU, "");
-        }
-        if (facts.marker() == Tri.NO) {
-            return new DebugVerdict.Judgment(Verdict.PROXY_FLOODGATE_VERISI_YOK, "");
-        }
-        for (int i = 6; i < steps.length; i += 3) {
+        for (int i = 0; i < steps.length; i += 3) {
             String field = (String) steps[i];
             Tri value = (Tri) steps[i + 1];
             Verdict failure = (Verdict) steps[i + 2];
+            if ("R1".equals(field)) {
+                if (value != Tri.YES) {
+                    return new DebugVerdict.Judgment(Verdict.OLCULEMEDI, field);
+                }
+                continue;
+            }
             if (value == Tri.UNKNOWN) {
                 return new DebugVerdict.Judgment(Verdict.OLCULEMEDI, field);
             }
-            boolean cancel = "R3".equals(field) || "R6".equals(field) || "aksiyon".equals(field);
-            if (cancel && value == Tri.YES) {
-                return new DebugVerdict.Judgment(failure, "");
+            if ("R3".equals(field) || "R6".equals(field)) {
+                if (value == Tri.YES) {
+                    return new DebugVerdict.Judgment(failure, "");
+                }
+                continue;
             }
-            if (!cancel && value == Tri.NO) {
+            if (value == Tri.NO) {
                 return new DebugVerdict.Judgment(failure, "");
             }
         }
         return new DebugVerdict.Judgment(Verdict.SAGLAM, "");
+    }
+
+    private static void fields() {
+        List<FieldWalk.Miss> misses = new ArrayList<>();
+        Object listener = FieldWalk.find(new PlayerChild(), Listener.class, "a-listener", misses);
+        Object connection = FieldWalk.find(listener, Conn.class, "a-connection", misses);
+        Object channel = FieldWalk.find(connection, Chan.class, "a-channel", misses);
+        check(channel instanceof Chan);
+        check(misses.isEmpty());
+        misses.clear();
+        Object direct = FieldWalk.find(new Direct(), Conn.class, "a-connection", misses);
+        check(direct instanceof Conn);
+        check(misses.isEmpty());
+        misses.clear();
+        Object missing = FieldWalk.find(new Empty(), Conn.class, "a-connection", misses);
+        check(missing == null);
+        String text = FieldWalk.text(misses);
+        check(text.contains(Empty.class.getName()));
+        check(text.contains("alan yok"));
+        check(text.contains(Conn.class.getName()));
+    }
+
+    private static void reports() {
+        String filled = ReportText.field("listeli", "evet", "ölçülemedi", "F FloodgateApi");
+        check("listeli=evet".equals(filled));
+        String blank = ReportText.field("uuid", " ", "", "F Session uuid bos");
+        check(blank.contains("ölçülemedi("));
+        check(blank.contains("Session"));
+        check(!blank.endsWith("="));
+        String missing = ReportText.field("kayitlar", null, "ölçülemedi", "F PluginMessageListenerRegistration");
+        String report = filled + "\n" + blank + "\n" + missing;
+        for (String line : report.split("\n")) {
+            int eq = line.indexOf('=');
+            check(eq > 0);
+            check(!line.substring(eq + 1).isBlank());
+            if (line.contains("ölçülemedi")) {
+                int open = line.indexOf('(');
+                int close = line.lastIndexOf(')');
+                check(open > eq && close > open + 1);
+                check(!line.substring(open + 1, close).isBlank());
+            }
+        }
+        check(!blank.equals("uuid=ölçülemedi"));
+    }
+
+    private static void messenger() {
+        FormTrace trace = new FormTrace();
+        trace.accept("floodgate:form", new byte[] {0x04, 0x00, '1'}, 10L);
+        check(trace.lines().size() == 1);
+        check(trace.lines().get(0).contains("R7"));
+        check(trace.lines().get(0).contains("floodgate:form"));
+        check(trace.lines().get(0).contains("1024"));
+        trace.accept("minecraft:brand", new byte[] {1, 2}, 11L);
+        check(trace.lines().size() == 1);
+    }
+
+    private static final class Chan {
+    }
+
+    private static final class Conn {
+        final Chan channel = new Chan();
+    }
+
+    private static class ListenerBase {
+        final Conn connection = new Conn();
+    }
+
+    private static final class Listener extends ListenerBase {
+    }
+
+    private static class PlayerBase {
+        final Listener connection = new Listener();
+    }
+
+    private static final class PlayerChild extends PlayerBase {
+    }
+
+    private static final class Direct {
+        final Conn connection = new Conn();
+    }
+
+    private static final class Empty {
     }
 
     private static void frames() {
@@ -258,14 +327,6 @@ public final class BedrockDebugTest {
     private static void fingerprints() {
         check("e3b0c44298fc1c14".equals(Fingerprint.prefix(new byte[0])));
         check("ba7816bf8f01cfea".equals(Fingerprint.prefix("abc".getBytes(StandardCharsets.UTF_8))));
-    }
-
-    private static void channelNotes() {
-        check(DebugVerdict.channelFilter(Tri.YES, Tri.NO));
-        check(!DebugVerdict.channelFilter(Tri.YES, Tri.YES));
-        check(!DebugVerdict.channelFilter(Tri.YES, Tri.UNKNOWN));
-        check(!DebugVerdict.channelFilter(Tri.NO, Tri.NO));
-        check(!DebugVerdict.channelFilter(Tri.UNKNOWN, Tri.NO));
     }
 
     private static void check(boolean ok) {

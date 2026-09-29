@@ -39,15 +39,19 @@ public final class PeHooks {
         }
     }
 
+    public static Object channel(Object player) {
+        return PacketEvents.getAPI().getPlayerManager().getChannel(player);
+    }
+
     public static String dump() {
         try {
             Object manager = PacketEvents.getAPI().getEventManager();
             StringBuilder out = new StringBuilder();
             walk(manager, out, 0);
             String text = out.toString().trim();
-            return text.isEmpty() ? null : text;
+            return text.isEmpty() ? "PeHooks.dump bos" : text;
         } catch (Throwable ex) {
-            return null;
+            return "PeHooks.dump " + FieldWalk.cause(ex);
         }
     }
 

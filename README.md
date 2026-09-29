@@ -19,18 +19,9 @@
 
 </div>
 
-## Bedrock form id slots
+## Bedrock formlar
 
-`floodgate:form` cevaplarında yalnızca form id'si vardır. Her plugin kendi bloğunu kullanır: `slot * 1024 + (sayaç mod 1024)`, slot 1–31. Sonuç `0x7FFF` altındadır. `0x8000` biti proxy formlarına ayrılmıştır.
-
-| Plugin | Slot | Id aralığı | Durum |
-| --- | --- | --- | --- |
-| smthsHub | 1 | 1024–2047 (`0x0400`–`0x07FF`) | 4.0.2'de uygulandı |
-| smthsSMP `BedrockUi` | 2 | 2048–3071 (`0x0800`–`0x0BFF`) | Kod değişmedi. Şu an id'yi 1'den `0x7FFE`'ye kadar sayıyor, her blokla çakışır |
-| smthsVaults `BedrockMenus` | — | — | Cumulus API. `floodgate:form` dinlemiyor, `silenceKickListener` yok |
-| smthsFriends | — | — | `floodgate:form` yok |
-
-`silenceKickListener` kopyası yalnızca smthsHub'daydı. Aynı kanalda eski kopya kalırsa diğer dinleyicileri silmeye devam eder.
+smthsHub `floodgate:form` kanalına dokunmaz. Bedrock menü Floodgate API ile açılır. Floodgate oyuncuyu tanımıyorsa sandık menüsü açılır.
 
 ## License
 

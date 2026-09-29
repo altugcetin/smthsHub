@@ -104,7 +104,7 @@ public class SmthsHubPlugin extends JavaPlugin {
 
         inventoryManager = new InventoryManager();
         inventoryManager.onEnable(this);
-        BedrockDebug.start(this);
+        BedrockDebug.bind(this);
 
         moduleManager = new ModuleManager();
         moduleManager.loadModules(this);

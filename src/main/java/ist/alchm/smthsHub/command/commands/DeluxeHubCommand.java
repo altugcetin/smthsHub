@@ -8,6 +8,7 @@ import ist.alchm.smthsHub.SmthsHubPlugin;
 import ist.alchm.smthsHub.Permissions;
 import ist.alchm.smthsHub.command.CommandManager;
 import ist.alchm.smthsHub.config.Messages;
+import ist.alchm.smthsHub.debug.BedrockDebug;
 import ist.alchm.smthsHub.inventory.BedrockMenus;
 import ist.alchm.smthsHub.inventory.InventoryManager;
 import ist.alchm.smthsHub.module.ModuleManager;
@@ -232,6 +233,58 @@ public class DeluxeHubCommand {
                     "%holding%", status.holding() ? yes : no,
                     "%pending%", pending
             );
+        }
+
+        else if (args.getString(0).equalsIgnoreCase("debug")) {
+            if (!sender.hasPermission(Permissions.COMMAND_DEBUG.getPermission())) {
+                Messages.NO_PERMISSION.send(sender);
+                return;
+            }
+            if (args.argsLength() < 2) {
+                Messages.DEBUG_USAGE.send(sender);
+                return;
+            }
+            String mode = args.getString(1);
+            if (mode.equalsIgnoreCase("off")) {
+                BedrockDebug.off();
+                Messages.DEBUG_STOPPED.send(sender);
+                return;
+            }
+            if (args.argsLength() < 3) {
+                Messages.DEBUG_USAGE.send(sender);
+                return;
+            }
+            Player target = Bukkit.getPlayer(args.getString(2));
+            if (target == null) {
+                Messages.DEBUG_OFFLINE.send(sender, "%player%", args.getString(2));
+                return;
+            }
+            if (mode.equalsIgnoreCase("on")) {
+                BedrockDebug.on(target.getUniqueId());
+                Messages.DEBUG_ARMED.send(sender);
+                return;
+            }
+            if (!BedrockDebug.active()) {
+                Messages.DEBUG_USAGE.send(sender);
+                return;
+            }
+            if (mode.equalsIgnoreCase("selftest")) {
+                BedrockDebug.selftest(target);
+                return;
+            }
+            if (mode.equalsIgnoreCase("report")) {
+                String report = BedrockDebug.report(target);
+                String code = "OLCULEMEDI";
+                int mark = report.lastIndexOf("HÜKÜM ");
+                if (mark >= 0) {
+                    String tail = report.substring(mark + "HÜKÜM ".length()).trim();
+                    int space = tail.indexOf(' ');
+                    code = space < 0 ? tail : tail.substring(0, space);
+                }
+                Messages.DEBUG_REPORT.send(sender, "%code%", code, "%sentence%", "", "%file%", "");
+                return;
+            }
+            Messages.DEBUG_USAGE.send(sender);
         }
 
         /*

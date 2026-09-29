@@ -72,7 +72,13 @@ public enum Messages {
     BEDROCK_YES("BEDROCK.YES"),
     BEDROCK_NO("BEDROCK.NO"),
     BEDROCK_NONE("BEDROCK.NONE"),
-    BEDROCK_UNLISTED("BEDROCK.UNLISTED");
+    BEDROCK_UNLISTED("BEDROCK.UNLISTED"),
+
+    DEBUG_ARMED("DEBUG.ARMED"),
+    DEBUG_STOPPED("DEBUG.STOPPED"),
+    DEBUG_USAGE("DEBUG.USAGE"),
+    DEBUG_OFFLINE("DEBUG.OFFLINE"),
+    DEBUG_REPORT("DEBUG.REPORT");
 
     private static FileConfiguration config;
     private final String path;

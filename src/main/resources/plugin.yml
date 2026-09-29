@@ -34,6 +34,7 @@ permissions:
       deluxehub.command.setlobby: true
       deluxehub.command.vanish: true
       deluxehub.command.bedrock: true
+      deluxehub.command.debug: true
   deluxehub.bypass.*:
     description: Gives access to all bypass permissions
     children:

@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class BedrockDebug {
@@ -62,10 +63,15 @@ public final class BedrockDebug {
 
     private static SmthsHubPlugin hub;
     private static Listener joins;
+    private static UUID only;
     private static String fingerprint = "";
     private static boolean fingerprintKnown;
     private static boolean peInstalled;
     private static boolean plInstalled;
+    private static String peHook = "";
+    private static String plHook = "";
+    private static String lastRegs = "";
+    private static final List<String> REG_EVENTS = new CopyOnWriteArrayList<>();
     private static final PluginMessageListener PROBE_LISTENER = (channel, player, message) -> {
         if (PROBE.equals(channel) && player != null) {
             UUID uuid = player.getUniqueId();
@@ -73,10 +79,31 @@ public final class BedrockDebug {
                 Session session = SESSIONS.get(uuid);
                 if (session != null) {
                     session.probeBukkit = Tri.YES;
-                    session.line("R7", PROBE, "", Tri.UNKNOWN);
+                    session.line("R7", PROBE, "t=" + System.currentTimeMillis(), Tri.UNKNOWN);
                 }
             });
         }
+    };
+    private static final PluginMessageListener FORM_LISTENER = (channel, player, message) -> {
+        if (!FORM.equals(channel) || player == null) {
+            return;
+        }
+        UUID uuid = player.getUniqueId();
+        byte[] copy = message == null ? null : message.clone();
+        long time = System.currentTimeMillis();
+        QUEUE.add(() -> {
+            Session session = SESSIONS.get(uuid);
+            if (session == null) {
+                return;
+            }
+            session.r7Counts.merge(FORM, 1, Integer::sum);
+            String text = FormTrace.line(time, copy);
+            session.hops.add(text);
+            say(text);
+            if (copy != null && copy.length >= 2) {
+                session.r7Id = ((copy[0] & 0xFF) << 8) | (copy[1] & 0xFF);
+            }
+        });
     };
 
     private BedrockDebug() {
@@ -86,21 +113,51 @@ public final class BedrockDebug {
         return ACTIVE.get();
     }
 
-    public static void start(SmthsHubPlugin plugin) {
+    public static void bind(SmthsHubPlugin plugin) {
         hub = plugin;
+    }
+
+    public static void on(UUID uuid) {
+        only = uuid;
+        if (ACTIVE.get()) {
+            return;
+        }
         ACTIVE.set(true);
         readKey();
-        registerProbe();
         installServer();
         installBridges();
         arm();
-        say(Messages.lookup("DEBUG.ARMED"));
+        say(plain("DEBUG.ARMED", "debug acik"));
+    }
+
+    public static void off() {
+        stop();
+        say(plain("DEBUG.STOPPED", "debug kapali"));
+    }
+
+    public static void selftest(Player player) {
+        inject(player);
+    }
+
+    public static String report(Player player) {
+        if (!ACTIVE.get()) {
+            return ReportText.field("debug", "", unknown(), "debug kapali");
+        }
+        flush();
+        Session session = SESSIONS.get(player.getUniqueId());
+        if (session == null) {
+            return ReportText.field("oturum", "", unknown(), "oyuncu debug acildiktan sonra girmedi");
+        }
+        String text = session.report(DebugVerdict.judge(session.facts()), true);
+        session.publish(text);
+        return text;
     }
 
     public static void arm() {
         if (!ACTIVE.get() || hub == null) {
             return;
         }
+        registerChannels();
         if (joins != null) {
             org.bukkit.event.HandlerList.unregisterAll(joins);
         }
@@ -108,6 +165,7 @@ public final class BedrockDebug {
         hub.getServer().getPluginManager().registerEvents(joins, hub);
         SmthsHubPlugin.scheduler().runTimer(task -> {
             flush();
+            watchRegs();
             repositionOnline();
         }, 5L, 5L);
     }
@@ -122,6 +180,10 @@ public final class BedrockDebug {
         if (hub != null) {
             try {
                 hub.getServer().getMessenger().unregisterIncomingPluginChannel(hub, PROBE);
+            } catch (Throwable ignored) {
+            }
+            try {
+                hub.getServer().getMessenger().unregisterIncomingPluginChannel(hub, FORM);
             } catch (Throwable ignored) {
             }
         }
@@ -156,6 +218,7 @@ public final class BedrockDebug {
         }
         CHANNELS.clear();
         SESSIONS.clear();
+        lastRegs = "";
     }
 
     public static void formApi(Player player) {
@@ -163,13 +226,6 @@ public final class BedrockDebug {
             return;
         }
         session(player).form("API", null);
-    }
-
-    public static void formRaw(Player player, int id) {
-        if (!ACTIVE.get()) {
-            return;
-        }
-        session(player).form("RAW", id);
     }
 
     public static void formSkipped(Player player) {
@@ -182,37 +238,12 @@ public final class BedrockDebug {
         QUEUE.add(session::emitForm);
     }
 
-    public static void messenger(Player player) {
-        if (!ACTIVE.get()) {
-            return;
-        }
-        Session session = session(player);
-        session.r7Counts.merge(FORM, 1, Integer::sum);
-        session.line("R7", FORM, "", Tri.UNKNOWN);
-    }
-
-    public static void decision(Player player, String name, Integer responseId, Integer pendingId) {
-        if (!ACTIVE.get()) {
-            return;
-        }
-        Session session = session(player);
-        session.decision = name;
-        session.responseId = responseId;
-        session.pendingId = pendingId;
-        session.act = "ACT".equals(name) ? Tri.YES : "IGNORE".equals(name) ? Tri.NO : Tri.UNKNOWN;
-        session.line("R8", FORM, name
-                + " cevap=" + (responseId == null ? word(Tri.UNKNOWN) : responseId)
-                + " bekleyen=" + (pendingId == null ? word(Tri.UNKNOWN) : pendingId), Tri.UNKNOWN);
-        if (!"ACT".equals(name)) {
-            QUEUE.add(session::emitForm);
-        }
-    }
-
     public static void actionRan(Player player) {
         if (!ACTIVE.get()) {
             return;
         }
         Session session = session(player);
+        session.action = Tri.YES;
         session.actionFailed = Tri.NO;
         QUEUE.add(session::emitForm);
     }
@@ -222,6 +253,7 @@ public final class BedrockDebug {
             return;
         }
         Session session = session(player);
+        session.action = Tri.NO;
         session.actionFailed = Tri.YES;
         session.stack = trace(error);
         QUEUE.add(session::emitForm);
@@ -274,8 +306,15 @@ public final class BedrockDebug {
     }
 
     private static void joined(Player player) {
+        if (only != null && !only.equals(player.getUniqueId())) {
+            return;
+        }
         Session session = session(player);
-        Channel channel = channel(player);
+        List<FieldWalk.Miss> misses = new ArrayList<>();
+        String[] step = new String[] {""};
+        Channel channel = channel(player, misses, step);
+        session.channelReason = FieldWalk.text(misses);
+        session.channelStep = step[0];
         if (channel != null) {
             CHANNELS.put(channel.id().asLongText(), player.getUniqueId());
             Hold hold = channel.attr(HOLD).get();
@@ -285,7 +324,9 @@ public final class BedrockDebug {
             channel.eventLoop().execute(() -> place(channel));
         }
         session.uuidForm = player.getUniqueId().getMostSignificantBits() == 0 ? Tri.YES : Tri.NO;
-        session.listed = listed(player.getUniqueId());
+        Listing listing = listing(player.getUniqueId());
+        session.listed = listing.value;
+        session.listedReason = listing.reason;
         session.joined = true;
         session.writeJoin();
         SmthsHubPlugin.scheduler().runLater(task -> inject(player), 40L);
@@ -303,14 +344,22 @@ public final class BedrockDebug {
             return;
         }
         Session session = SESSIONS.get(player.getUniqueId());
-        Channel channel = channel(player);
-        if (session == null || channel == null) {
+        List<FieldWalk.Miss> misses = new ArrayList<>();
+        Channel channel = channel(player, misses, new String[1]);
+        if (session == null) {
+            return;
+        }
+        if (channel == null) {
+            session.probeInjected = Tri.UNKNOWN;
+            session.injectReason = "selftest kanal " + FieldWalk.text(misses);
+            session.line("selftest", PROBE, session.injectReason, Tri.UNKNOWN);
             return;
         }
         Integer packetId = packetId(channel);
         if (packetId == null) {
             session.probeInjected = Tri.UNKNOWN;
-            session.line("selftest", PROBE, word(Tri.UNKNOWN), Tri.UNKNOWN);
+            session.injectReason = "selftest packetId decoder.protocolInfo.codec.toId custom_payload yok";
+            session.line("selftest", PROBE, session.injectReason, Tri.UNKNOWN);
             return;
         }
         session.probeInjected = Tri.YES;
@@ -325,13 +374,19 @@ public final class BedrockDebug {
                 String anchor = channel.pipeline().get("decompress") != null ? "decompress" : "splitter";
                 if (channel.pipeline().get(anchor) == null) {
                     buf.release();
-                    QUEUE.add(() -> session.line("selftest", PROBE, word(Tri.UNKNOWN), Tri.UNKNOWN));
+                    QUEUE.add(() -> {
+                        session.injectReason = "selftest " + anchor + " handler yok";
+                        session.line("selftest", PROBE, session.injectReason, Tri.UNKNOWN);
+                    });
                     return;
                 }
                 channel.pipeline().context(anchor).fireChannelRead(buf);
             } catch (Throwable ex) {
                 buf.release();
-                QUEUE.add(() -> session.line("selftest", PROBE, word(Tri.UNKNOWN), Tri.UNKNOWN));
+                QUEUE.add(() -> {
+                    session.injectReason = "selftest " + FieldWalk.cause(ex);
+                    session.line("selftest", PROBE, session.injectReason, Tri.UNKNOWN);
+                });
             }
         });
     }
@@ -362,10 +417,45 @@ public final class BedrockDebug {
         }
     }
 
-    private static void registerProbe() {
-        if (!hub.getServer().getMessenger().isIncomingChannelRegistered(hub, PROBE)) {
-            hub.getServer().getMessenger().registerIncomingPluginChannel(hub, PROBE, PROBE_LISTENER);
+    private static void registerChannels() {
+        var messenger = hub.getServer().getMessenger();
+        if (!messenger.isIncomingChannelRegistered(hub, PROBE)) {
+            messenger.registerIncomingPluginChannel(hub, PROBE, PROBE_LISTENER);
         }
+        if (!messenger.isIncomingChannelRegistered(hub, FORM)) {
+            messenger.registerIncomingPluginChannel(hub, FORM, FORM_LISTENER);
+        }
+    }
+
+    private static void watchRegs() {
+        if (!ACTIVE.get() || hub == null) {
+            return;
+        }
+        String now = regSnapshot();
+        if (lastRegs.isEmpty()) {
+            lastRegs = now;
+            return;
+        }
+        if (lastRegs.equals(now)) {
+            return;
+        }
+        String event = System.currentTimeMillis() + " " + lastRegs + " -> " + now;
+        REG_EVENTS.add(event);
+        say(event);
+        lastRegs = now;
+    }
+
+    private static String regSnapshot() {
+        List<String> names = new ArrayList<>();
+        try {
+            for (org.bukkit.plugin.messaging.PluginMessageListenerRegistration registration : hub.getServer().getMessenger().getIncomingChannelRegistrations(FORM)) {
+                names.add(registration.getPlugin().getName() + ":" + registration.getListener().getClass().getName());
+            }
+        } catch (Throwable ex) {
+            return "olculemedi(" + FieldWalk.cause(ex) + ")";
+        }
+        names.sort(String::compareTo);
+        return names.isEmpty() ? "yok" : String.join(", ", names);
     }
 
     private static void installServer() {
@@ -388,16 +478,24 @@ public final class BedrockDebug {
             try {
                 PeHooks.register();
                 peInstalled = true;
-            } catch (Throwable ignored) {
+                peHook = "";
+            } catch (Throwable ex) {
+                peHook = "PeHooks.register " + FieldWalk.cause(ex);
             }
+        } else {
+            peHook = "PacketEvents plugin yok";
         }
         Plugin protocol = hub.getServer().getPluginManager().getPlugin("ProtocolLib");
         if (protocol != null && protocol.isEnabled()) {
             try {
                 PlHooks.register(hub);
                 plInstalled = true;
-            } catch (Throwable ignored) {
+                plHook = "";
+            } catch (Throwable ex) {
+                plHook = "PlHooks.register " + FieldWalk.cause(ex);
             }
+        } else {
+            plHook = "ProtocolLib plugin yok";
         }
     }
 
@@ -538,13 +636,22 @@ public final class BedrockDebug {
             if (session == null) {
                 return;
             }
+            session.frames++;
             if (custom != null) {
                 session.r1Counts.merge(custom, 1, Integer::sum);
+                if (session.formAt > 0) {
+                    session.line("R1", custom, "t=" + System.currentTimeMillis(), Tri.UNKNOWN);
+                }
             }
             if (form != null) {
                 session.raw = Tri.YES;
                 session.formR1 = true;
-                session.line("R1", FORM, form.idBytes() == 2 ? Integer.toString(form.id()) : word(Tri.UNKNOWN), Tri.UNKNOWN);
+                if (form.idBytes() == 2) {
+                    session.replyWireId = form.id();
+                }
+                String idText = form.idBytes() == 2 ? Integer.toString(form.id()) : "kisa";
+                String match = session.wireId == null || form.idBytes() != 2 ? "" : (session.wireId == form.id() ? " C=ayni" : " C=" + session.wireId);
+                session.line("R1", FORM, "t=" + System.currentTimeMillis() + " id=" + idText + match, Tri.UNKNOWN);
                 session.followRaw();
             }
             if (probe != null) {
@@ -573,8 +680,8 @@ public final class BedrockDebug {
             if (send.idBytes() == 2) {
                 session.wireId = send.id();
             }
-            session.line("C", FORM, "tip=" + (send.type() < 0 ? word(Tri.UNKNOWN) : send.type())
-                    + " id=" + (send.idBytes() == 2 ? send.id() : word(Tri.UNKNOWN))
+            session.line("C", FORM, "tip=" + (send.type() < 0 ? unknown() + "(C FrameScan tip yok)" : send.type())
+                    + " id=" + (send.idBytes() == 2 ? send.id() : unknown() + "(C FrameScan id bayti yok)")
                     + " boyut=" + send.afterChannel(), Tri.UNKNOWN);
         });
     }
@@ -591,15 +698,16 @@ public final class BedrockDebug {
             if (session == null) {
                 return;
             }
+            String stamp = "t=" + System.currentTimeMillis() + " " + type;
             if (FORM.equals(channelName)) {
                 session.decoded = Tri.YES;
-                session.line("R4", FORM, type, Tri.UNKNOWN);
+                session.line("R4", FORM, stamp, Tri.UNKNOWN);
             } else if (PROBE.equals(channelName)) {
                 session.probeDecoded = Tri.YES;
-                session.line("R4", PROBE, type, Tri.UNKNOWN);
+                session.line("R4", PROBE, stamp, Tri.UNKNOWN);
             } else if (type.contains("CustomPayload") || type.contains("Payload")) {
                 session.decodedUnread = true;
-                session.line("R4", channelName == null ? word(Tri.UNKNOWN) : channelName, type, Tri.UNKNOWN);
+                session.line("R4", channelName == null ? "kanal-yok" : channelName, stamp, Tri.UNKNOWN);
             }
         });
     }
@@ -641,37 +749,62 @@ public final class BedrockDebug {
         return data;
     }
 
-    private static Tri listed(UUID uuid) {
+    private record Listing(Tri value, String reason) {
+    }
+
+    private static Listing listing(UUID uuid) {
         Plugin plugin = hub.getServer().getPluginManager().getPlugin("floodgate");
         if (plugin == null || !plugin.isEnabled()) {
-            return Tri.NO;
+            return new Listing(Tri.NO, "floodgate plugin yok");
         }
         try {
             Class<?> api = Class.forName("org.geysermc.floodgate.api.FloodgateApi", true, plugin.getClass().getClassLoader());
             Object instance = api.getMethod("getInstance").invoke(null);
             Object player = api.getMethod("getPlayer", UUID.class).invoke(instance, uuid);
-            return player == null ? Tri.NO : Tri.YES;
+            if (player == null) {
+                return new Listing(Tri.NO, "FloodgateApi.getPlayer null");
+            }
+            return new Listing(Tri.YES, "");
         } catch (Throwable ex) {
-            return Tri.UNKNOWN;
+            return new Listing(Tri.UNKNOWN, "FloodgateApi " + FieldWalk.cause(ex));
         }
     }
 
     private static Channel channel(Player player) {
+        return channel(player, new ArrayList<>(), new String[1]);
+    }
+
+    private static Channel channel(Player player, List<FieldWalk.Miss> misses, String[] step) {
         try {
             Object handle = player.getClass().getMethod("getHandle").invoke(player);
-            Object listener = typed(handle, "PacketListener");
-            if (listener == null) {
-                return null;
+            Class<?> listenerType = Class.forName("net.minecraft.server.network.ServerGamePacketListenerImpl");
+            Class<?> connectionType = Class.forName("net.minecraft.network.Connection");
+            Object listener = FieldWalk.find(handle, listenerType, "a-listener", misses);
+            Object connection = listener == null ? null : FieldWalk.find(listener, connectionType, "a-connection", misses);
+            Object channel = connection == null ? null : FieldWalk.find(connection, Channel.class, "a-channel", misses);
+            if (channel instanceof Channel found) {
+                step[0] = "a";
+                return found;
             }
-            Object connection = typed(listener, "Connection");
-            if (connection == null) {
-                return null;
-            }
-            Object channel = typed(connection, "Channel");
-            return channel instanceof Channel found ? found : null;
         } catch (Throwable ex) {
+            misses.add(new FieldWalk.Miss("a", player.getClass().getName(), Channel.class.getName(), FieldWalk.cause(ex)));
+        }
+        Plugin packetEvents = hub == null ? null : hub.getServer().getPluginManager().getPlugin("packetevents");
+        if (packetEvents == null || !packetEvents.isEnabled()) {
+            misses.add(new FieldWalk.Miss("b", "PacketEvents", Channel.class.getName(), "plugin yok"));
             return null;
         }
+        try {
+            Object channel = PeHooks.channel(player);
+            if (channel instanceof Channel found) {
+                step[0] = "b";
+                return found;
+            }
+            misses.add(new FieldWalk.Miss("b", "PacketEvents.getPlayerManager", Channel.class.getName(), channel == null ? "getChannel null" : channel.getClass().getName()));
+        } catch (Throwable ex) {
+            misses.add(new FieldWalk.Miss("b", "PacketEvents.getPlayerManager", Channel.class.getName(), FieldWalk.cause(ex)));
+        }
+        return null;
     }
 
     private static Object typed(Object target, String simpleName) {
@@ -794,13 +927,44 @@ public final class BedrockDebug {
     }
 
     private static String word(Tri value) {
-        if (value == Tri.YES) {
-            return Messages.lookup("DEBUG.YES");
+        String key = value == Tri.YES ? "DEBUG.YES" : value == Tri.NO ? "DEBUG.NO" : "DEBUG.UNKNOWN";
+        String fallback = value == Tri.YES ? "evet" : value == Tri.NO ? "hayir" : "ölçülemedi";
+        String text = Messages.lookup(key);
+        return text == null || text.isBlank() ? fallback : text;
+    }
+
+    private static String unknown() {
+        return word(Tri.UNKNOWN);
+    }
+
+    private static String plain(String path, String fallback) {
+        String text = Messages.lookup(path);
+        return text == null || text.isBlank() ? fallback : text;
+    }
+
+    private static String viaFault = "";
+
+    private static String via(UUID uuid) {
+        viaFault = "";
+        Plugin plugin = hub.getServer().getPluginManager().getPlugin("ViaVersion");
+        if (plugin == null || !plugin.isEnabled()) {
+            return "yok";
         }
-        if (value == Tri.NO) {
-            return Messages.lookup("DEBUG.NO");
+        try {
+            Class<?> type = Class.forName("com.viaversion.viaversion.api.Via", true, plugin.getClass().getClassLoader());
+            Object api = type.getMethod("getAPI").invoke(null);
+            int player = (Integer) api.getClass().getMethod("getPlayerVersion", UUID.class).invoke(api, uuid);
+            Object serverVersion = api.getClass().getMethod("getServerVersion").invoke(api);
+            int server = (Integer) serverVersion.getClass().getMethod("getVersion").invoke(serverVersion);
+            String line = "oyuncu=" + player + " sunucu=" + server;
+            if (player != server) {
+                line += " ViaVersion çeviri yapıyor";
+            }
+            return line;
+        } catch (Throwable ex) {
+            viaFault = "Via " + FieldWalk.cause(ex);
+            return "";
         }
-        return Messages.lookup("DEBUG.UNKNOWN");
     }
 
     private static String trace(Throwable error) {
@@ -937,7 +1101,7 @@ public final class BedrockDebug {
         private Tri formSent = Tri.UNKNOWN;
         private Tri raw = Tri.UNKNOWN;
         private Tri decoded = Tri.UNKNOWN;
-        private Tri act = Tri.UNKNOWN;
+        private Tri action = Tri.UNKNOWN;
         private Tri actionFailed = Tri.UNKNOWN;
         private Tri peCancel = Tri.UNKNOWN;
         private Tri plCancel = Tri.UNKNOWN;
@@ -946,6 +1110,14 @@ public final class BedrockDebug {
         private Tri probeBukkit = Tri.UNKNOWN;
         private Tri probeInjected = Tri.NO;
         private boolean joined;
+        private int frames;
+        private int r7Id = -1;
+        private int replyWireId = -1;
+        private long formAt;
+        private String channelStep = "";
+        private String channelReason = "";
+        private String listedReason = "";
+        private String injectReason = "";
         private boolean formR1;
         private boolean decodedUnread;
         private boolean peSaw;
@@ -980,15 +1152,16 @@ public final class BedrockDebug {
             formPath = path;
             sentId = id;
             formSent = Tri.YES;
-            line("C", FORM, "yol=" + path + " id=" + (id == null ? word(Tri.UNKNOWN) : id), Tri.UNKNOWN);
+            formAt = System.currentTimeMillis();
+            line("C", FORM, "yol=" + path + " id=" + (id == null ? "api" : id) + " t=" + formAt, Tri.UNKNOWN);
             SmthsHubPlugin.scheduler().runLater(task -> {
                 if (!formReported) {
-                    if (raw == Tri.UNKNOWN) {
+                    if (!formR1 && frames > 0) {
                         raw = Tri.NO;
                     }
                     emitForm();
                 }
-            }, 600L);
+            }, 1200L);
         }
 
         private void packetEvents(String channel, boolean cancelled, boolean monitor) {
@@ -1044,9 +1217,11 @@ public final class BedrockDebug {
             joinReported = true;
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
-                listed = listed(uuid);
+                Listing listing = listing(uuid);
+                listed = listing.value;
+                listedReason = listing.reason;
             }
-            DebugVerdict.Judgment judgment = DebugVerdict.handshake(uuidForm, marker(), listed);
+            DebugVerdict.Judgment judgment = DebugVerdict.judge(facts());
             String report = report(judgment, false);
             publish(report);
         }
@@ -1059,7 +1234,9 @@ public final class BedrockDebug {
             formReported = true;
             Player player = Bukkit.getPlayer(uuid);
             if (player != null) {
-                listed = listed(uuid);
+                Listing listing = listing(uuid);
+                listed = listing.value;
+                listedReason = listing.reason;
             }
             closeGaps();
             DebugVerdict.Judgment judgment = DebugVerdict.judge(facts());
@@ -1068,7 +1245,7 @@ public final class BedrockDebug {
 
         private void closeGaps() {
             if (!peInstalled) {
-                peCancel = Tri.NO;
+                peCancel = peHook.startsWith("PacketEvents plugin yok") ? Tri.NO : Tri.UNKNOWN;
             } else if (!peSaw && raw == Tri.YES) {
                 peCancel = Tri.UNKNOWN;
             } else if (!peSaw && raw == Tri.NO) {
@@ -1078,30 +1255,63 @@ public final class BedrockDebug {
                 decoded = Tri.NO;
             }
             if (!plInstalled) {
-                plCancel = Tri.NO;
+                plCancel = plHook.startsWith("ProtocolLib plugin yok") ? Tri.NO : Tri.UNKNOWN;
             } else if (!plSaw && decoded == Tri.YES) {
                 plCancel = Tri.UNKNOWN;
             } else if (!plSaw) {
                 plCancel = Tri.NO;
             }
+            if (r7Counts.getOrDefault(FORM, 0) > 0 && action == Tri.UNKNOWN) {
+                action = Tri.NO;
+            }
         }
 
         private DebugVerdict.Facts facts() {
-            if (!peInstalled) {
-                peCancel = Tri.NO;
+            closeGaps();
+            Tri measuring = frames > 0 ? Tri.YES : r1Present() ? Tri.NO : Tri.UNKNOWN;
+            Tri reply;
+            if (formR1) {
+                reply = Tri.YES;
+            } else if (formSent == Tri.YES && measuring == Tri.YES && System.currentTimeMillis() - formAt >= 60000L) {
+                reply = Tri.NO;
+            } else if (formSent == Tri.YES && raw == Tri.NO && measuring == Tri.YES) {
+                reply = Tri.NO;
+            } else {
+                reply = Tri.UNKNOWN;
             }
-            if (!plInstalled) {
-                plCancel = Tri.NO;
-            }
+            Tri listener = floodgateListener();
+            Tri r3 = !peInstalled && peHook.startsWith("PacketEvents plugin yok") ? Tri.NO : peCancel;
+            Tri r6 = !plInstalled && plHook.startsWith("ProtocolLib plugin yok") ? Tri.NO : plCancel;
             Tri bukkit;
             if (r7Counts.getOrDefault(FORM, 0) > 0) {
                 bukkit = Tri.YES;
-            } else if (decoded == Tri.YES && plCancel == Tri.NO) {
+            } else if (decoded == Tri.YES && r6 == Tri.NO) {
                 bukkit = Tri.NO;
             } else {
                 bukkit = Tri.UNKNOWN;
             }
-            return new DebugVerdict.Facts(uuidForm, marker(), listed, formSent, raw, peCancel, decoded, plCancel, bukkit, act, actionFailed);
+            return new DebugVerdict.Facts(listed, listener, formSent, measuring, reply, r3, decoded, r6, bukkit, action);
+        }
+
+        private boolean r1Present() {
+            Player player = Bukkit.getPlayer(uuid);
+            Channel channel = player == null ? null : channel(player);
+            return channel != null && channel.pipeline().get(R1) != null;
+        }
+
+        private Tri floodgateListener() {
+            String regs = regSnapshot();
+            if (regs.startsWith("olculemedi")) {
+                return Tri.UNKNOWN;
+            }
+            for (String part : regs.split(", ")) {
+                int colon = part.indexOf(':');
+                String plugin = colon < 0 ? part : part.substring(0, colon);
+                if ("floodgate".equalsIgnoreCase(plugin)) {
+                    return Tri.YES;
+                }
+            }
+            return Tri.NO;
         }
 
         private Tri marker() {
@@ -1138,89 +1348,89 @@ public final class BedrockDebug {
                 out.append("host=").append(result.hostLength())
                         .append(" parca=").append(result.parts())
                         .append(" isaretci=").append(word(result.marker() ? Tri.YES : Tri.NO))
-                        .append(" surum=").append(result.version() < 0 ? word(Tri.UNKNOWN) : result.version())
-                        .append(" floodgate_oncesi=").append(word(hold.before))
+                        .append(" surum=").append(result.version() < 0 ? unknown() + "(H HandshakeScan surum bayti yok)" : result.version())
+                        .append(" floodgate_oncesi=").append(hold.before == Tri.UNKNOWN ? unknown() + "(H floodgate_data_handler yok)" : word(hold.before))
                         .append('\n');
                 out.append(hold.pipeline).append('\n');
             }
-            out.append(Messages.lookup("DEBUG.HEAD_F")).append('\n');
-            BedrockMenus.Status status = null;
             Player player = Bukkit.getPlayer(uuid);
-            if (player != null) {
-                try {
-                    status = BedrockMenus.status(player);
-                } catch (Throwable ignored) {
-                }
-            }
-            out.append("uuid=").append(word(uuidForm))
-                    .append(" listeli=").append(word(listed))
-                    .append(" floodgate_dinleyici=").append(status == null ? word(Tri.UNKNOWN) : String.join(", ", status.plugins()))
-                    .append(" bizde=").append(status == null ? word(Tri.UNKNOWN) : word(status.holding() ? Tri.YES : Tri.NO))
-                    .append('\n');
+            Channel channel = player == null ? null : channel(player);
+            List<String> names = channel == null ? List.of() : channel.pipeline().names();
+            out.append(Messages.lookup("DEBUG.HEAD_F")).append('\n');
+            String regs = regSnapshot();
+            String listedValue = listed == Tri.UNKNOWN ? "" : word(listed);
+            String listedWhy = listed == Tri.UNKNOWN ? "F FloodgateApi " + listedReason : listedReason;
+            out.append(ReportText.field("uuid", uuid.toString(), unknown(), "F uuid bos")).append(' ');
+            out.append(ReportText.field("listeli", listedValue, unknown(), listedWhy.isBlank() ? "F FloodgateApi.getPlayer" : listedWhy)).append(' ');
+            out.append(ReportText.field("kayitlar", regs.startsWith("olculemedi") ? "" : regs, unknown(), regs.startsWith("olculemedi") ? regs : "F messenger floodgate:form")).append('\n');
+            out.append(ReportText.field("kanal", channelStep.isBlank() ? "" : channelStep, unknown(), channelReason.isBlank() ? "kanal adimi yok" : channelReason)).append('\n');
+            String viaLine = via(uuid);
+            out.append(ReportText.field("via", viaLine, unknown(), viaFault.isBlank() ? "Via getPlayerVersion" : viaFault)).append('\n');
+            out.append(ReportText.field("kayit_olay", REG_EVENTS.isEmpty() ? "yok" : String.join(" | ", REG_EVENTS), unknown(), "kayit izlenmedi")).append('\n');
             if (fingerprintKnown) {
                 out.append(Messages.lookup("DEBUG.FINGERPRINT", "%fingerprint%", fingerprint)).append('\n');
             } else {
-                out.append(Messages.lookup("DEBUG.FINGERPRINT", "%fingerprint%", word(Tri.UNKNOWN))).append('\n');
+                out.append(Messages.lookup("DEBUG.FINGERPRINT", "%fingerprint%", unknown() + "(H key.pem okunamadi)")).append('\n');
             }
             out.append(Messages.lookup("DEBUG.HEAD_C")).append('\n');
-            out.append("yol=").append(formPath == null ? word(Tri.UNKNOWN) : formPath)
-                    .append(" id=").append(sentId == null ? word(Tri.UNKNOWN) : sentId)
-                    .append(" tel_tip=").append(wireType < 0 ? word(Tri.UNKNOWN) : wireType)
-                    .append(" tel_id=").append(wireId == null ? word(Tri.UNKNOWN) : wireId)
-                    .append(" tel_boyut=").append(wireBytes < 0 ? word(Tri.UNKNOWN) : wireBytes)
-                    .append('\n');
+            out.append(ReportText.field("yol", formPath, unknown(), "C form henuz yok")).append(' ');
+            out.append(ReportText.field("id", sentId == null ? (formPath == null ? "" : "api") : sentId.toString(), unknown(), "C id yok")).append(' ');
+            out.append(ReportText.field("tel_tip", wireType < 0 ? "" : Integer.toString(wireType), unknown(), "C tel_tip " + Encoded.class.getName() + " form ciktisi yok")).append(' ');
+            out.append(ReportText.field("tel_id", wireId == null ? "" : wireId.toString(), unknown(), "C tel_id " + Encoded.class.getName() + " id bayti yok")).append(' ');
+            out.append(ReportText.field("tel_boyut", wireBytes < 0 ? "" : Integer.toString(wireBytes), unknown(), "C tel_boyut " + Encoded.class.getName())).append('\n');
+            int seenId = replyWireId >= 0 ? replyWireId : r7Id;
+            String idCompare = wireId == null || seenId < 0 ? "" : (wireId == seenId ? "ayni" : "farkli C=" + wireId + " gelen=" + seenId);
+            out.append(ReportText.field("tel_karsilastirma", idCompare, unknown(), "tel id icin C ve R7 gerekli")).append('\n');
             out.append(Messages.lookup("DEBUG.HEAD_R")).append('\n');
+            appendHop(out, "R1", r1Text(names), r1Reason(names));
+            appendHop(out, "R2", hopInstalled(peInstalled, peHook, "PacketEvents plugin yok"), hopReason("R2", peInstalled, peHook));
+            appendHop(out, "R3", triText(peCancel, peInstalled, peHook, "PacketEvents plugin yok"), triReason("R3", peCancel, peInstalled, peHook, "PeHooks paket gorulmedi"));
+            appendHop(out, "R4", decoded == Tri.UNKNOWN ? "" : word(decoded), decoded == Tri.UNKNOWN ? "R4 " + Decoded.class.getName() + " custom payload yok" : "");
+            appendHop(out, "R5", hopInstalled(plInstalled, plHook, "ProtocolLib plugin yok"), hopReason("R5", plInstalled, plHook));
+            appendHop(out, "R6", triText(plCancel, plInstalled, plHook, "ProtocolLib plugin yok"), triReason("R6", plCancel, plInstalled, plHook, "PlHooks paket gorulmedi"));
+            appendHop(out, "R7", r7Text(), r7Reason());
+            appendHop(out, "karar", judgment.verdict() == Verdict.OLCULEMEDI ? "" : word(judgment.verdict() == Verdict.SAGLAM ? Tri.YES : Tri.NO), judgment.verdict() == Verdict.OLCULEMEDI ? "karar " + judgment.blocked() : "");
             if (hops.isEmpty()) {
-                out.append(word(Tri.UNKNOWN)).append('\n');
+                out.append(ReportText.field("zaman", "", unknown(), "zaman cizelgesi bos")).append('\n');
             } else {
                 for (String hop : hops) {
                     out.append(hop).append('\n');
                 }
             }
-            out.append("R1 ");
-            if (r1Counts.isEmpty()) {
-                out.append(word(Tri.UNKNOWN)).append('\n');
-            } else {
-                r1Counts.forEach((channel, count) -> out.append(channel).append('=').append(count).append(' '));
-                out.append('\n');
-            }
-            out.append("R7 ");
-            if (r7Counts.isEmpty()) {
-                out.append(Messages.lookup("DEBUG.NONE")).append('\n');
-            } else {
-                r7Counts.forEach((channel, count) -> out.append(channel).append('=').append(count).append(' '));
-                out.append('\n');
+            if (judgment.verdict() == Verdict.CEVAP_BACKENDE_ULASMADI) {
+                StringBuilder other = new StringBuilder();
+                r1Counts.forEach((key, count) -> other.append(key).append('=').append(count).append(' '));
+                out.append(ReportText.field("diger", other.length() == 0 ? "yok" : other.toString().trim(), unknown(), "R1 custom payload yok")).append('\n');
             }
             out.append(Messages.lookup("DEBUG.HEAD_SELF")).append('\n');
-            out.append("enjekte=").append(word(probeInjected))
-                    .append(" R1=").append(word(probeRaw))
-                    .append(" R4=").append(word(probeDecoded))
-                    .append(" R7=").append(word(probeBukkit))
-                    .append('\n');
-            if (DebugVerdict.channelFilter(probeBukkit, r7Counts.getOrDefault(FORM, 0) > 0 ? Tri.YES : Tri.NO) && formSent == Tri.YES) {
-                out.append(Messages.lookup("DEBUG.FILTER")).append('\n');
+            out.append(ReportText.field("enjekte", probeInjected == Tri.UNKNOWN ? "" : word(probeInjected), unknown(), injectReason.isBlank() ? "selftest packetId decoder.protocolInfo.codec.toId" : injectReason)).append(' ');
+            out.append(ReportText.field("self_R1", probeRaw == Tri.UNKNOWN ? "" : word(probeRaw), unknown(), "selftest R1 " + Raw.class.getName())).append(' ');
+            out.append(ReportText.field("self_R4", probeDecoded == Tri.UNKNOWN ? "" : word(probeDecoded), unknown(), "selftest R4 " + Decoded.class.getName())).append(' ');
+            out.append(ReportText.field("self_R7", probeBukkit == Tri.UNKNOWN ? "" : word(probeBukkit), unknown(), "selftest R7 " + PROBE_LISTENER.getClass().getName())).append('\n');
+            if (probeBukkit == Tri.YES && formSent == Tri.YES && r7Counts.getOrDefault(FORM, 0) == 0) {
+                out.append(plain("DEBUG.FILTER", "smthshub:probe Bukkit'e ulasiyor, floodgate:form ulasmiyor")).append('\n');
             }
-            Channel channel = player == null ? null : channel(player);
-            List<String> names = channel == null ? List.of() : channel.pipeline().names();
             out.append(Messages.lookup("DEBUG.HEAD_PIPE")).append('\n');
             if (names.isEmpty()) {
-                out.append(word(Tri.UNKNOWN)).append('\n');
+                out.append(ReportText.field("pipeline", "", unknown(), channelReason.isBlank() ? "pipeline kanal yok" : channelReason)).append('\n');
             } else {
                 for (String pipe : names) {
                     io.netty.channel.ChannelHandler handler = channel.pipeline().get(pipe);
-                    String type = handler == null ? word(Tri.UNKNOWN) : handler.getClass().getName();
-                    String plugin = handler == null ? word(Tri.UNKNOWN) : owner(handler.getClass());
-                    out.append(pipe).append(' ').append(type).append(' ').append(plugin).append('\n');
+                    String type = handler == null ? "" : handler.getClass().getName();
+                    String plugin = handler == null ? "" : owner(handler.getClass());
+                    out.append(ReportText.field(pipe, (type + " " + plugin).trim(), unknown(), "pipeline handler null")).append('\n');
                 }
             }
-            out.append("R1-decoder ");
-            out.append(names.isEmpty() ? word(Tri.UNKNOWN) : slice(names, channel.pipeline().get("decompress") != null ? "decompress" : "splitter", "decoder")).append('\n');
-            out.append("decoder-packet_handler ");
-            out.append(names.isEmpty() ? word(Tri.UNKNOWN) : slice(names, "decoder", "packet_handler")).append('\n');
+            String betweenIn = names.isEmpty() ? "" : slice(names, channel.pipeline().get("decompress") != null ? "decompress" : "splitter", "decoder");
+            String betweenOut = names.isEmpty() ? "" : slice(names, "decoder", "packet_handler");
+            out.append(ReportText.field("R1-decoder", betweenIn, unknown(), "pipeline R1-decoder araligi yok")).append('\n');
+            out.append(ReportText.field("decoder-packet_handler", betweenOut, unknown(), "pipeline decoder-packet_handler araligi yok")).append('\n');
             out.append(Messages.lookup("DEBUG.HEAD_PE")).append('\n');
-            out.append(peInstalled ? textOrUnknown(peDump()) : Messages.lookup("DEBUG.NONE")).append('\n');
+            out.append(ReportText.field("R2", hopInstalled(peInstalled, peHook, "PacketEvents plugin yok"), unknown(), hopReason("R2", peInstalled, peHook))).append(' ');
+            out.append(ReportText.field("R3", hopInstalled(peInstalled, peHook, "PacketEvents plugin yok"), unknown(), hopReason("R3", peInstalled, peHook))).append('\n');
+            out.append(peInstalled ? textOrUnknown(peDump()) : plain("DEBUG.NONE", "yok")).append('\n');
             out.append(Messages.lookup("DEBUG.HEAD_PL")).append('\n');
-            out.append(plInstalled ? textOrUnknown(plDump()) : Messages.lookup("DEBUG.NONE")).append('\n');
+            out.append(plInstalled ? textOrUnknown(plDump()) : plain("DEBUG.NONE", "yok")).append('\n');
             out.append(Messages.lookup("DEBUG.HEAD_PLUGINS")).append('\n');
             for (Plugin plugin : Bukkit.getPluginManager().getPlugins()) {
                 out.append(plugin.getName()).append(' ').append(plugin.getDescription().getVersion()).append('\n');
@@ -1236,13 +1446,20 @@ public final class BedrockDebug {
                     }
                 }
             }
-            out.append(anti.length() == 0 ? Messages.lookup("DEBUG.NONE") : anti.toString().trim()).append('\n');
+            String antiText = anti.length() == 0 ? plain("DEBUG.NONE", "yok") : anti.toString().trim();
+            out.append(antiText.isBlank() ? "yok" : antiText).append('\n');
+            String remover = "olay kaydi yok";
+            for (int i = REG_EVENTS.size() - 1; i >= 0; i--) {
+                if (REG_EVENTS.get(i).toLowerCase().contains("floodgate")) {
+                    remover = REG_EVENTS.get(i);
+                    break;
+                }
+            }
             String sentence = Messages.lookup("DEBUG.VERDICT." + judgment.verdict().name(),
-                    "%field%", judgment.blocked(),
-                    "%response%", responseId == null ? word(Tri.UNKNOWN) : responseId.toString(),
-                    "%pending%", pendingId == null ? word(Tri.UNKNOWN) : pendingId.toString());
-            if (sentence.isEmpty()) {
-                sentence = word(Tri.UNKNOWN);
+                    "%field%", judgment.blocked().isBlank() ? "yok" : judgment.blocked(),
+                    "%remover%", remover);
+            if (sentence == null || sentence.isBlank()) {
+                sentence = judgment.verdict().name() + (judgment.blocked().isBlank() ? "" : " " + judgment.blocked());
             }
             out.append(name).append(" HÜKÜM ").append(judgment.verdict().name()).append(' ').append(sentence).append('\n');
             if (form && formSent == Tri.YES && (judgment.verdict() == Verdict.CEVAP_BACKENDE_ULASMADI || raw != Tri.YES)) {
@@ -1251,8 +1468,90 @@ public final class BedrockDebug {
             if (stack != null) {
                 out.append(stack).append('\n');
             }
-            out.append(Messages.lookup("DEBUG.FILE", "%file%", file.getAbsolutePath())).append('\n');
+            String fileLine = Messages.lookup("DEBUG.FILE", "%file%", file.getAbsolutePath());
+            out.append(fileLine == null || fileLine.isBlank() ? "dosya=" + file.getAbsolutePath() : fileLine).append('\n');
             return out.toString().trim();
+        }
+
+        private static void appendHop(StringBuilder out, String key, String value, String reason) {
+            out.append(ReportText.field(key, value, unknown(), reason)).append('\n');
+        }
+
+        private String r1Text(List<String> names) {
+            if (frames <= 0) {
+                return "";
+            }
+            int index = names.indexOf(R1);
+            String prev = index > 0 ? names.get(index - 1) : "yok";
+            String next = index >= 0 && index + 1 < names.size() ? names.get(index + 1) : "yok";
+            return "evet konum=" + prev + " ile " + next + " arasi cerceve=" + frames;
+        }
+
+        private String r1Reason(List<String> names) {
+            if (frames > 0) {
+                return "";
+            }
+            if (names.contains(R1)) {
+                return "R1 olcmuyor " + Raw.class.getName() + " cerceve=0";
+            }
+            return "R1 " + Raw.class.getName() + " " + (channelReason.isBlank() ? "kanal yok" : channelReason);
+        }
+
+        private String r7Text() {
+            if (r7Counts.getOrDefault(FORM, 0) > 0) {
+                return "evet";
+            }
+            if (decoded == Tri.YES && plCancel == Tri.NO) {
+                return "hayir";
+            }
+            return "";
+        }
+
+        private String r7Reason() {
+            if (r7Counts.getOrDefault(FORM, 0) > 0 || (decoded == Tri.YES && plCancel == Tri.NO)) {
+                return "";
+            }
+            return "R7 " + FORM_LISTENER.getClass().getName() + " floodgate:form gelmedi";
+        }
+
+        private static String hopInstalled(boolean installed, String hook, String absent) {
+            if (installed) {
+                return "evet";
+            }
+            if (hook.startsWith(absent)) {
+                return "hayir";
+            }
+            return "";
+        }
+
+        private static String hopReason(String hop, boolean installed, String hook) {
+            if (installed) {
+                return "";
+            }
+            return hop + " " + (hook.isBlank() ? "kurulum yok" : hook);
+        }
+
+        private static String triText(Tri value, boolean installed, String hook, String absent) {
+            if (!installed && hook.startsWith(absent)) {
+                return "hayir";
+            }
+            if (value == Tri.YES) {
+                return "evet";
+            }
+            if (value == Tri.NO) {
+                return "hayir";
+            }
+            return "";
+        }
+
+        private static String triReason(String hop, Tri value, boolean installed, String hook, String unseen) {
+            if (value != Tri.UNKNOWN || (!installed && hook.startsWith("PacketEvents plugin yok")) || (!installed && hook.startsWith("ProtocolLib plugin yok"))) {
+                return "";
+            }
+            if (!installed) {
+                return hop + " " + hook;
+            }
+            return hop + " " + unseen;
         }
     }
 
@@ -1260,10 +1559,10 @@ public final class BedrockDebug {
         int start = names.indexOf(from);
         int end = names.indexOf(to);
         if (start < 0 || end < 0 || end <= start) {
-            return Messages.lookup("DEBUG.UNKNOWN");
+            return "";
         }
         if (end == start + 1) {
-            return Messages.lookup("DEBUG.NONE");
+            return "yok";
         }
         return String.join(", ", names.subList(start + 1, end));
     }
@@ -1285,6 +1584,6 @@ public final class BedrockDebug {
     }
 
     private static String textOrUnknown(String text) {
-        return text == null || text.isEmpty() ? Messages.lookup("DEBUG.UNKNOWN") : text;
+        return text == null || text.isBlank() ? unknown() + "(dump bos)" : text;
     }
 }

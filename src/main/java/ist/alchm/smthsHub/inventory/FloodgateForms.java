@@ -42,8 +42,6 @@ final class FloodgateForms {
                     }
                     return;
                 }
-                BedrockDebug.messenger(player);
-                BedrockDebug.decision(player, "ACT", null, null);
                 try {
                     for (ClickAction action : item.getClickActions()) {
                         action.execute(player);
